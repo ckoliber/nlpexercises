@@ -198,6 +198,21 @@ unicode = ["unicodedata2 (>=14.0.0)"]
 woff = ["zopfli (>=0.1.4)", "brotlicffi (>=0.8.0)", "brotli (>=1.0.1)"]
 
 [[package]]
+name = "hazm"
+version = "0.7.0"
+description = "Python library for digesting Persian text."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+libwapiti = {version = ">=0.2.1", markers = "platform_system != \"Windows\""}
+nltk = "3.3"
+
+[package.extras]
+wapiti = ["libwapiti (>=0.2.1)"]
+
+[[package]]
 name = "importlib-resources"
 version = "5.4.0"
 description = "Read resources from Python packages"
@@ -446,6 +461,17 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "libwapiti"
+version = "0.2.1"
+description = "Python bindings for libwapiti"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+six = "*"
+
+[[package]]
 name = "markupsafe"
 version = "2.1.1"
 description = "Safely add untrusted strings to HTML/XML markup."
@@ -572,6 +598,25 @@ description = "Patch asyncio to allow nested event loops"
 category = "main"
 optional = false
 python-versions = ">=3.5"
+
+[[package]]
+name = "nltk"
+version = "3.3"
+description = "Natural Language Toolkit"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+six = "*"
+
+[package.extras]
+all = ["pyparsing", "gensim", "requests", "scipy", "twython", "scikit-learn", "numpy", "matplotlib", "python-crfsuite"]
+corenlp = ["requests"]
+machine_learning = ["gensim", "numpy", "python-crfsuite", "scikit-learn", "scipy"]
+plot = ["matplotlib"]
+tgrep = ["pyparsing"]
+twitter = ["twython"]
 
 [[package]]
 name = "notebook"
@@ -1097,7 +1142,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "5d5136a0e0032b902cc32af280ccb7cb3ab0b3b51f5815b76458fd5152b7a3b8"
+content-hash = "a7b6d5194ab58fdd7b89fe4b5ad314a6827cd6f53d273accc93e461bf63456a4"
 
 [metadata.files]
 appnope = [
@@ -1255,6 +1300,11 @@ fonttools = [
     {file = "fonttools-4.31.2-py3-none-any.whl", hash = "sha256:2df636a3f402ef14593c6811dac0609563b8c374bd7850e76919eb51ea205426"},
     {file = "fonttools-4.31.2.zip", hash = "sha256:236b29aee6b113e8f7bee28779c1230a86ad2aac9a74a31b0aedf57e7dfb62a4"},
 ]
+hazm = [
+    {file = "hazm-0.7.0-py2-none-any.whl", hash = "sha256:3b2c4e44f85353c0119ff1c049a65bd715fd0562266e6d6094d194052d56c85b"},
+    {file = "hazm-0.7.0-py3-none-any.whl", hash = "sha256:cef734a07d9dcc676ab1626806e89a6bb2f9ebac8c5af72916e105e94f5f364f"},
+    {file = "hazm-0.7.0.tar.gz", hash = "sha256:acb050198d8f80cc279cc66dc8438f9f5a57f8d1e5680a2826289ab03cfbb30f"},
+]
 importlib-resources = [
     {file = "importlib_resources-5.4.0-py3-none-any.whl", hash = "sha256:33a95faed5fc19b4bc16b29a6eeae248a3fe69dd55d4d229d2b480e23eeaad45"},
     {file = "importlib_resources-5.4.0.tar.gz", hash = "sha256:d756e2f85dd4de2ba89be0b21dba2a3bbec2e871a42a3a16719258a11f87506b"},
@@ -1360,6 +1410,10 @@ kiwisolver = [
     {file = "kiwisolver-1.4.0-pp37-pypy37_pp73-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:daf2030bf18c21bf91fa9cf6a403a765519c9168bd7a91ba1d66d5c7f70ded1e"},
     {file = "kiwisolver-1.4.0-pp37-pypy37_pp73-win_amd64.whl", hash = "sha256:5ca92de8e48678a2cbbd90adb10773e3553bb9fd1c090bf0dfe5fc3337a181ea"},
     {file = "kiwisolver-1.4.0.tar.gz", hash = "sha256:7508b01e211178a85d21f1f87029846b77b2404a4c68cbd14748d4d4142fa3b8"},
+]
+libwapiti = [
+    {file = "libwapiti-0.2.1-py2.7-linux-x86_64.egg", hash = "sha256:effb9192c9494f3c6094a8d010babac0f93a15639e2220979f1f13a7300c7287"},
+    {file = "libwapiti-0.2.1.tar.gz", hash = "sha256:1ee047ada85f7abf076b70aa7d5793b28bb1327274f403d2c6923e27bb01097e"},
 ]
 markupsafe = [
     {file = "MarkupSafe-2.1.1-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:86b1f75c4e7c2ac2ccdaec2b9022845dbb81880ca318bb7a0a01fbf7813e3812"},
@@ -1467,6 +1521,10 @@ nbformat = [
 nest-asyncio = [
     {file = "nest_asyncio-1.5.4-py3-none-any.whl", hash = "sha256:3fdd0d6061a2bb16f21fe8a9c6a7945be83521d81a0d15cff52e9edee50101d6"},
     {file = "nest_asyncio-1.5.4.tar.gz", hash = "sha256:f969f6013a16fadb4adcf09d11a68a4f617c6049d7af7ac2c676110169a63abd"},
+]
+nltk = [
+    {file = "nltk-3.3.0.win32.exe", hash = "sha256:687cd9c09fcb68058436f9952964e758673c7baccb7a322470f8c1b284e33cee"},
+    {file = "nltk-3.3.0.zip", hash = "sha256:fe0eda251be65843be86d7de9abfbf7161732256f742e623b21243ec47bdb718"},
 ]
 notebook = [
     {file = "notebook-6.4.10-py3-none-any.whl", hash = "sha256:49cead814bff0945fcb2ee07579259418672ac175d3dc3d8102a4b0a656ed4df"},
