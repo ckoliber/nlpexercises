@@ -1,0 +1,12 @@
+cache-dir = "."
+
+[installer]
+parallel = true
+
+[experimental]
+new-installer = false
+
+[virtualenvs]
+create = true
+in-project = true
+path = "{cache-dir}\\virtualenvs"

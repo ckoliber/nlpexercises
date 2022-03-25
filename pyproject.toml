@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "nlpexercises"
+version = "0.1.0"
+description = "NLP Exercises"
+authors = ["KoLiBer <koliberr136a1@gmail.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+jupyter = "^1.0.0"
+ipykernel = "^6.9.2"
+numpy = "^1.22.3"
+matplotlib = "^3.5.1"
+scikit-learn = "^1.0.2"
+pandas = "^1.4.1"
+scipy = "1.6.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
