@@ -25,7 +25,7 @@ echo .env.example > .env
 poetry run jupyter notebook
 ```
 
-Open http://127.0.0.1:3000 in your browser.
+Open http://127.0.0.1:8888 in your browser.
 
 ## Contributing
 
