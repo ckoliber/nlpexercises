@@ -1,3 +1,5 @@
+import warnings
+
 import re as re
 
 import numba as nb
@@ -7,6 +9,8 @@ import sklearn as sk
 import matplotlib.pyplot as plt
 
 import sklearn.base as skbase
+
+warnings.filterwarnings("ignore", category=nb.NumbaPerformanceWarning)
 
 
 @nb.jit(nopython=True)
@@ -18,9 +22,8 @@ def _alpha(x, start_probs, transition_probs, observation_probs):
     for t in range(1, len(x), 1):
         token = x[t]
         for i in range(n_components):
-            alpha[t, i] = np.dot(
-                alpha[t - 1, :],
-                transition_probs[:, i]
+            alpha[t, i] = (
+                alpha[t - 1, :] @ transition_probs[:, i]
             ) * observation_probs[i, token]
 
     return alpha
@@ -35,10 +38,9 @@ def _beta(x, start_probs, transition_probs, observation_probs):
     for t in range(len(x) - 2, -1, -1):
         next_token = x[t + 1]
         for i in range(n_components):
-            beta[t, i] = np.dot(
-                beta[t + 1] * observation_probs[:, next_token],
-                transition_probs[i, :]
-            )
+            beta[t, i] = (
+                beta[t + 1] * observation_probs[:, next_token]
+            ) @ transition_probs[i, :]
 
     return beta
 
@@ -48,35 +50,26 @@ def _xi(x, alpha, beta, start_probs, transition_probs, observation_probs):
     n_components = start_probs.shape[0]
     xi = np.zeros((len(x) - 1, n_components, n_components))
 
-    for t in range(0, len(x) - 2, 1):
+    for t in range(0, len(x) - 1, 1):
         next_token = x[t + 1]
-        down = np.dot(
-            np.dot(
-                alpha[t, :].T,
-                transition_probs
-            ) * observation_probs[:, next_token].T,
-            beta[t + 1, :]
-        )
+
+        denominator = (
+            (alpha[t, :].T @ transition_probs) *
+            observation_probs[:, next_token].T
+        ) @ beta[t + 1, :]
         for i in range(n_components):
-            top = alpha[t, i] * transition_probs[i, :] * (
+            numerator = alpha[t, i] * transition_probs[i, :] * (
                 observation_probs[:, next_token].T * beta[t + 1, :].T
             )
-            xi[t, i, :] = top / down
+            xi[t, i, :] = numerator / denominator
 
     return xi
 
 
 @nb.jit(nopython=True)
-def _gamma(x, alpha, beta, start_probs, transition_probs, observation_probs):
-    n_components = start_probs.shape[0]
-    gamma = np.zeros((len(x), n_components))
-
-    for t in range(0, len(x), 1):
-        for i in range(n_components):
-            gamma[t, i] = alpha[t, i] * beta[t, i] / sum([
-                (alpha[t, j] * beta[t, j])
-                for j in range(n_components)
-            ])
+def _gamma(x, xi):
+    gamma = np.sum(xi, axis=2)
+    gamma = np.vstack((gamma, np.sum(xi[-2, :, :], axis=1).reshape((1, -1))))
 
     return gamma
 
@@ -115,8 +108,7 @@ def _fit(X, n_iter, n_components, start_probs, transition_probs, observation_pro
                          transition_probs, observation_probs)
             xis[r, :, :, :] = _xi(x, alpha, beta, start_probs,
                                   transition_probs, observation_probs)
-            gammas[r, :, :] = _gamma(x, alpha, beta, start_probs,
-                                     transition_probs, observation_probs)
+            gammas[r, :, :] = _gamma(x, xis[r, :, :, :])
 
         for i in range(n_components):
             start_probs[i] = sum([

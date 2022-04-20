@@ -13,8 +13,8 @@ def main() -> int:
         pd.read_csv(test_path, header=None, names=[
                     "Text"]).to_numpy().flatten()
     )
-    test_features = list(map(lambda x: np.array(
-        list(map(lambda t: ord(t) - ord('A'), x))), test_features))
+    test_features = np.array(list(map(lambda x: np.array(
+        list(map(lambda t: ord(t) - ord('A'), x))), test_features)))
 
     scores = []
     for model_name in models:
