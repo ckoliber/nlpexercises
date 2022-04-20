@@ -52,7 +52,6 @@ def _xi(x, alpha, beta, start_probs, transition_probs, observation_probs):
 
     for t in range(0, len(x) - 1, 1):
         next_token = x[t + 1]
-
         denominator = (
             (alpha[t, :].T @ transition_probs) *
             observation_probs[:, next_token].T
@@ -69,7 +68,9 @@ def _xi(x, alpha, beta, start_probs, transition_probs, observation_probs):
 @nb.jit(nopython=True)
 def _gamma(x, xi):
     gamma = np.sum(xi, axis=2)
-    gamma = np.vstack((gamma, np.sum(xi[-2, :, :], axis=1).reshape((1, -1))))
+    gamma = np.vstack(
+        (gamma, np.sum(xi[len(x) - 2, :, :], axis=0).reshape((1, -1)))
+    )
 
     return gamma
 
@@ -87,14 +88,9 @@ def _score(X, start_probs, transition_probs, observation_probs):
 
 @nb.jit(nopython=True, parallel=True)
 def _fit(X, n_iter, n_components, start_probs, transition_probs, observation_probs):
-    for q in range(n_iter):
+    for iii in range(n_iter):
+        print(f"Iter: {iii}")
         R = len(X)
-
-        score = np.mean(
-            _score(X, start_probs, transition_probs, observation_probs)
-        )
-        print(f"Score {q}:")
-        print(score)
 
         xis = np.zeros((R, len(X[0]) - 1, n_components, n_components))
         gammas = np.zeros((R, len(X[0]), n_components))
@@ -110,36 +106,19 @@ def _fit(X, n_iter, n_components, start_probs, transition_probs, observation_pro
                                   transition_probs, observation_probs)
             gammas[r, :, :] = _gamma(x, xis[r, :, :, :])
 
-        for i in range(n_components):
-            start_probs[i] = sum([
-                gammas[r, 0, i]
-                for r in range(R)
-            ]) / R
+        # start_probs = np.sum(gammas[:, 0, :], axis=0) / R
 
-        for i in range(n_components):
-            for j in range(n_components):
-                transition_probs[i, j] = sum([
-                    xis[r, t, i, j]
-                    for r in range(R)
-                    for t in range(len(X[r]) - 1)
-                ]) / sum([
-                    gammas[r, t, i]
-                    for r in range(R)
-                    for t in range(len(X[r]) - 1)
-                ])
+        transition_probs = xis.sum(0).sum(0) / (
+            gammas[:, 0:-1, :].sum(0).sum(0).reshape(-1, 1)
+        )
 
-        for i in range(n_components):
-            for k in range(n_components):
-                observation_probs[i, k] = sum([
-                    gammas[r, t, i]
-                    for r in range(R)
-                    for t in range(len(X[r]))
-                    if X[r][t] == k
-                ]) / sum([
-                    gammas[r, t, i]
-                    for r in range(R)
-                    for t in range(len(X[r]))
-                ])
+        denominator = gammas.sum(0).sum(0).reshape(-1, 1)
+        for k in range(observation_probs.shape[1]):
+            sum_probs = np.zeros((len(X), n_components))
+            for r in nb.prange(R):
+                sum_probs[r] = gammas[r][X[r] == k, :].sum(0)
+            observation_probs[:, k] = sum_probs.sum(0)
+        observation_probs = observation_probs / denominator
 
     return (start_probs, transition_probs, observation_probs)
 
@@ -162,13 +141,12 @@ class HMMEstimator(skbase.BaseEstimator):
         self.n_iter = n_iter
 
     def score(self, X, y=None):
-        result = []
-        for x in X:
-            alpha = _alpha(x, self.start_probs,
-                           self.transition_probs, self.observation_probs)
-            result.append(sum(alpha[-1, :]))
-
-        return result
+        return _score(
+            X,
+            self.start_probs,
+            self.transition_probs,
+            self.observation_probs
+        )
 
     def predict(self, X, y=None):
         pass
