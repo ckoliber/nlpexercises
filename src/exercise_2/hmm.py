@@ -9,67 +9,66 @@ import matplotlib.pyplot as plt
 import sklearn.base as skbase
 
 
-@nb.jit(nopython=True, fastmath=True)
-def _alpha(x, n_components, start_probs, transition_probs, observation_probs):
+@nb.jit(nopython=True)
+def _alpha(x, start_probs, transition_probs, observation_probs):
+    n_components = start_probs.shape[0]
     alpha = np.zeros((len(x), n_components))
     alpha[0, :] = start_probs[:] * observation_probs[:, x[0]]
 
     for t in range(1, len(x), 1):
         token = x[t]
         for i in range(n_components):
-            alpha[t, i] = observation_probs[i, token] * sum([
-                alpha[t - 1, j] * transition_probs[j, i]
-                for j in range(n_components)
-            ])
+            alpha[t, i] = np.dot(
+                alpha[t - 1, :],
+                transition_probs[:, i]
+            ) * observation_probs[i, token]
 
     return alpha
 
 
-@nb.jit(nopython=True, fastmath=True)
-def _beta(x, n_components, start_probs, transition_probs, observation_probs):
+@nb.jit(nopython=True)
+def _beta(x, start_probs, transition_probs, observation_probs):
+    n_components = start_probs.shape[0]
     beta = np.zeros((len(x), n_components))
-    beta[-1, :] = np.ones((1, n_components))
+    beta[-1, :] = np.ones((n_components))
 
     for t in range(len(x) - 2, -1, -1):
         next_token = x[t + 1]
         for i in range(n_components):
-            beta[t, i] = sum([
-                beta[t + 1, j]
-                * transition_probs[i, j]
-                * observation_probs[j, next_token]
-                for j in range(n_components)
-            ])
+            beta[t, i] = np.dot(
+                beta[t + 1] * observation_probs[:, next_token],
+                transition_probs[i, :]
+            )
 
     return beta
 
 
-@nb.jit(nopython=True, fastmath=True)
-def _xi(x, alpha, beta, n_components, start_probs, transition_probs, observation_probs):
+@nb.jit(nopython=True)
+def _xi(x, alpha, beta, start_probs, transition_probs, observation_probs):
+    n_components = start_probs.shape[0]
     xi = np.zeros((len(x) - 1, n_components, n_components))
 
-    for t in range(0, len(x) - 1, 1):
+    for t in range(0, len(x) - 2, 1):
         next_token = x[t + 1]
+        down = np.dot(
+            np.dot(
+                alpha[t, :].T,
+                transition_probs
+            ) * observation_probs[:, next_token].T,
+            beta[t + 1, :]
+        )
         for i in range(n_components):
-            for j in range(n_components):
-                xi[t, i, j] = (
-                    alpha[t, i]
-                    * transition_probs[i, j]
-                    * beta[t + 1, j]
-                    * observation_probs[j, next_token]
-                ) / sum([
-                    alpha[t, k]
-                    * transition_probs[k, w]
-                    * beta[t + 1, w]
-                    * observation_probs[w, next_token]
-                    for w in range(n_components)
-                    for k in range(n_components)
-                ])
+            top = alpha[t, i] * transition_probs[i, :] * (
+                observation_probs[:, next_token].T * beta[t + 1, :].T
+            )
+            xi[t, i, :] = top / down
 
     return xi
 
 
-@nb.jit(nopython=True, fastmath=True)
-def _gamma(x, alpha, beta, n_components, start_probs, transition_probs, observation_probs):
+@nb.jit(nopython=True)
+def _gamma(x, alpha, beta, start_probs, transition_probs, observation_probs):
+    n_components = start_probs.shape[0]
     gamma = np.zeros((len(x), n_components))
 
     for t in range(0, len(x), 1):
@@ -82,10 +81,27 @@ def _gamma(x, alpha, beta, n_components, start_probs, transition_probs, observat
     return gamma
 
 
-@nb.jit(nopython=True, parallel=True, fastmath=True)
+@nb.jit(nopython=True, parallel=True)
+def _score(X, start_probs, transition_probs, observation_probs):
+    result = np.zeros((len(X)))
+
+    for i in nb.prange(len(X)):
+        alpha = _alpha(X[i], start_probs, transition_probs, observation_probs)
+        result[i] = np.sum(alpha[-1, :])
+
+    return result
+
+
+@nb.jit(nopython=True, parallel=True)
 def _fit(X, n_iter, n_components, start_probs, transition_probs, observation_probs):
-    for _ in range(n_iter):
+    for q in range(n_iter):
         R = len(X)
+
+        score = np.mean(
+            _score(X, start_probs, transition_probs, observation_probs)
+        )
+        print(f"Score {q}:")
+        print(score)
 
         xis = np.zeros((R, len(X[0]) - 1, n_components, n_components))
         gammas = np.zeros((R, len(X[0]), n_components))
@@ -93,17 +109,14 @@ def _fit(X, n_iter, n_components, start_probs, transition_probs, observation_pro
         for r in nb.prange(R):
             x = X[r]
 
-            alpha = _alpha(x, n_components, start_probs,
+            alpha = _alpha(x, start_probs,
                            transition_probs, observation_probs)
-            beta = _beta(x, n_components, start_probs,
+            beta = _beta(x, start_probs,
                          transition_probs, observation_probs)
-            xis[r, :, :, :] = _xi(x, alpha, beta, n_components, start_probs,
+            xis[r, :, :, :] = _xi(x, alpha, beta, start_probs,
                                   transition_probs, observation_probs)
-            gammas[r, :, :] = _gamma(x, alpha, beta, n_components, start_probs,
+            gammas[r, :, :] = _gamma(x, alpha, beta, start_probs,
                                      transition_probs, observation_probs)
-
-            print(alpha)
-            print(beta)
 
         for i in range(n_components):
             start_probs[i] = sum([
@@ -159,7 +172,7 @@ class HMMEstimator(skbase.BaseEstimator):
     def score(self, X, y=None):
         result = []
         for x in X:
-            alpha = _alpha(x, self.n_components, self.start_probs,
+            alpha = _alpha(x, self.start_probs,
                            self.transition_probs, self.observation_probs)
             result.append(sum(alpha[-1, :]))
 

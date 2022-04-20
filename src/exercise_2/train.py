@@ -11,7 +11,7 @@ def main() -> int:
     output_path = sys.argv[4]
 
     train_features = pd.read_csv(train_path, header=None, names=[
-                                 "Text"]).head(10).to_numpy().flatten()
+                                 "Text"]).to_numpy().flatten()
     train_features = np.array(list(map(lambda x: np.array(
         list(map(lambda t: ord(t) - ord('A'), x))), train_features)))
 
