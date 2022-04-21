@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import sklearn.base as skbase
 
 warnings.filterwarnings("ignore", category=nb.NumbaPerformanceWarning)
+warnings.filterwarnings("ignore", category=nb.NumbaPendingDeprecationWarning)
 
 
 @nb.jit(nopython=True)
@@ -102,11 +103,11 @@ def _fit(X, n_iter, n_components, start_probs, transition_probs, observation_pro
                            transition_probs, observation_probs)
             beta = _beta(x, start_probs,
                          transition_probs, observation_probs)
-            xis[r, :, :, :] = _xi(x, alpha, beta, start_probs,
-                                  transition_probs, observation_probs)
-            gammas[r, :, :] = _gamma(x, xis[r, :, :, :])
+            xis[r] = _xi(x, alpha, beta, start_probs,
+                         transition_probs, observation_probs)
+            gammas[r] = _gamma(x, xis[r])
 
-        # start_probs = np.sum(gammas[:, 0, :], axis=0) / R
+        start_probs = np.sum(gammas[:, 0, :], axis=0) / R
 
         transition_probs = xis.sum(0).sum(0) / (
             gammas[:, 0:-1, :].sum(0).sum(0).reshape(-1, 1)
