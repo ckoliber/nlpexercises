@@ -82,7 +82,6 @@ def _score(X, lengths, start_probs, transition_probs, observation_probs):
 @nb.jit(nopython=True, parallel=True)
 def _fit(X, lengths, n_iter, n_components, start_probs, transition_probs, observation_probs):
     for _ in range(n_iter):
-        print(f"Iter: {_}")
         R = len(lengths)
         xis = np.zeros((R, lengths[0] - 1, n_components, n_components))
         gammas = np.zeros((R, lengths[0], n_components))
