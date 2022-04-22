@@ -1,13 +1,8 @@
 import warnings
 
 import re as re
-
 import numba as nb
 import numpy as np
-import pandas as pd
-import sklearn as sk
-import matplotlib.pyplot as plt
-
 import sklearn.base as skbase
 
 warnings.filterwarnings("ignore", category=nb.NumbaPerformanceWarning)
@@ -77,48 +72,49 @@ def _gamma(x, xi):
 
 
 @nb.jit(nopython=True, parallel=True)
-def _score(X, start_probs, transition_probs, observation_probs):
-    result = np.zeros((len(X)))
+def _score(X, lengths, start_probs, transition_probs, observation_probs):
+    R = len(lengths)
+    result = np.zeros((R))
 
-    for i in nb.prange(len(X)):
-        alpha = _alpha(X[i], start_probs, transition_probs, observation_probs)
-        result[i] = np.sum(alpha[-1, :])
+    for r in nb.prange(R):
+        x = X[lengths[0:r].sum():lengths[0:r+1].sum()]
+
+        alpha = _alpha(x, start_probs, transition_probs, observation_probs)
+        result[r] = np.sum(alpha[-1, :])
 
     return result
 
 
 @nb.jit(nopython=True, parallel=True)
-def _fit(X, n_iter, n_components, start_probs, transition_probs, observation_probs):
-    for iii in range(n_iter):
-        print(f"Iter: {iii}")
-        R = len(X)
-
-        xis = np.zeros((R, len(X[0]) - 1, n_components, n_components))
-        gammas = np.zeros((R, len(X[0]), n_components))
+def _fit(X, lengths, n_iter, n_components, start_probs, transition_probs, observation_probs):
+    for _ in range(n_iter):
+        print(f"Iter: {_}")
+        R = len(lengths)
+        xis = np.zeros((R, lengths[0] - 1, n_components, n_components))
+        gammas = np.zeros((R, lengths[0], n_components))
 
         for r in nb.prange(R):
-            x = X[r]
+            x = X[lengths[0:r].sum():lengths[0:r+1].sum()]
 
-            alpha = _alpha(x, start_probs,
-                           transition_probs, observation_probs)
-            beta = _beta(x, start_probs,
-                         transition_probs, observation_probs)
-            xis[r] = _xi(x, alpha, beta, start_probs,
-                         transition_probs, observation_probs)
+            alpha = _alpha(x, start_probs, transition_probs, observation_probs)
+            beta = _beta(x, start_probs, transition_probs, observation_probs)
+            xis[r] = _xi(x, alpha, beta, start_probs, transition_probs, observation_probs)
             gammas[r] = _gamma(x, xis[r])
 
         start_probs = np.sum(gammas[:, 0, :], axis=0) / R
 
-        transition_probs = xis.sum(0).sum(0) / (
-            gammas[:, 0:-1, :].sum(0).sum(0).reshape(-1, 1)
-        )
+        transition_probs = xis.sum(0).sum(0) / gammas[:, 0:-1].sum(0).sum(0).reshape(-1, 1)
 
         denominator = gammas.sum(0).sum(0).reshape(-1, 1)
         for k in range(observation_probs.shape[1]):
-            sum_probs = np.zeros((len(X), n_components))
+            sum_probs = np.zeros((R, n_components))
             for r in nb.prange(R):
-                sum_probs[r] = gammas[r][X[r] == k, :].sum(0)
+                x = X[lengths[0:r].sum():lengths[0:r+1].sum()]
+
+                sum_probs[r] = gammas[r][x == k, :].sum(0)
+            
             observation_probs[:, k] = sum_probs.sum(0)
+        
         observation_probs = observation_probs / denominator
 
     return (start_probs, transition_probs, observation_probs)
@@ -141,26 +137,30 @@ class HMMEstimator(skbase.BaseEstimator):
         self.n_components = n_components
         self.n_iter = n_iter
 
-    def score(self, X, y=None):
+    def score(self, X, lengths):
         return _score(
             X,
+            lengths,
             self.start_probs,
             self.transition_probs,
             self.observation_probs
         )
 
-    def predict(self, X, y=None):
+    def predict(self, X, lengths):
         pass
 
-    def fit(self, X, y=None):
+    def fit(self, X, lengths):
         (self.start_probs, self.transition_probs, self.observation_probs) = _fit(
             X,
+            lengths,
             self.n_iter,
             self.n_components,
             self.start_probs,
             self.transition_probs,
             self.observation_probs
         )
+
+        return self
 
 
 def load_model(path):
