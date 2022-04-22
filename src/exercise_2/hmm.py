@@ -8,7 +8,6 @@ import sklearn.base as skbase
 warnings.filterwarnings("ignore", category=nb.NumbaPerformanceWarning)
 warnings.filterwarnings("ignore", category=nb.NumbaPendingDeprecationWarning)
 
-
 @nb.jit(nopython=True)
 def _alpha(x, start_probs, transition_probs, observation_probs):
     n_components = start_probs.shape[0]
@@ -24,7 +23,6 @@ def _alpha(x, start_probs, transition_probs, observation_probs):
 
     return alpha
 
-
 @nb.jit(nopython=True)
 def _beta(x, start_probs, transition_probs, observation_probs):
     n_components = start_probs.shape[0]
@@ -39,7 +37,6 @@ def _beta(x, start_probs, transition_probs, observation_probs):
             ) @ transition_probs[i, :]
 
     return beta
-
 
 @nb.jit(nopython=True)
 def _xi(x, alpha, beta, start_probs, transition_probs, observation_probs):
@@ -60,7 +57,6 @@ def _xi(x, alpha, beta, start_probs, transition_probs, observation_probs):
 
     return xi
 
-
 @nb.jit(nopython=True)
 def _gamma(x, xi):
     gamma = np.sum(xi, axis=2)
@@ -69,7 +65,6 @@ def _gamma(x, xi):
     )
 
     return gamma
-
 
 @nb.jit(nopython=True, parallel=True)
 def _score(X, lengths, start_probs, transition_probs, observation_probs):
@@ -83,7 +78,6 @@ def _score(X, lengths, start_probs, transition_probs, observation_probs):
         result[r] = np.sum(alpha[-1, :])
 
     return result
-
 
 @nb.jit(nopython=True, parallel=True)
 def _fit(X, lengths, n_iter, n_components, start_probs, transition_probs, observation_probs):
@@ -118,7 +112,6 @@ def _fit(X, lengths, n_iter, n_components, start_probs, transition_probs, observ
         observation_probs = observation_probs / denominator
 
     return (start_probs, transition_probs, observation_probs)
-
 
 class HMMEstimator(skbase.BaseEstimator):
     def __init__(
@@ -162,7 +155,6 @@ class HMMEstimator(skbase.BaseEstimator):
 
         return self
 
-
 def load_model(path):
     sections = open(path).read().split("\n\n")
 
@@ -187,7 +179,6 @@ def load_model(path):
         n_components=start_probs.size,
         n_iter=5,
     )
-
 
 def save_model(path, model):
     text = ""
