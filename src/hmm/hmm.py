@@ -9,6 +9,33 @@ warnings.filterwarnings("ignore", category=nb.NumbaPerformanceWarning)
 warnings.filterwarnings("ignore", category=nb.NumbaPendingDeprecationWarning)
 
 @nb.jit(nopython=True)
+def _delta(x, start_probs, transition_probs, observation_probs):
+    n_components = start_probs.shape[0]
+    delta = np.zeros((len(x), n_components))
+    delta[0, :] = start_probs[:] * observation_probs[:, x[0]]
+
+    for t in range(1, len(x), 1):
+        token = x[t]
+        for i in range(n_components):
+            delta[t, i] = np.max(
+                delta[t - 1, :] * transition_probs[:, i]
+            ) * observation_probs[i, token]
+
+    return delta
+
+@nb.jit(nopython=True)
+def _psi(x, start_probs, transition_probs, delta):
+    n_components = start_probs.shape[0]
+    psi = np.zeros((len(x), n_components))
+    psi[0, :] = np.zeros((n_components))
+
+    for t in range(1, len(x), 1):
+        for i in range(n_components):
+            psi[t, i] = np.argmax(delta[t - 1] * transition_probs[:, i])
+
+    return psi
+
+@nb.jit(nopython=True)
 def _alpha(x, start_probs, transition_probs, observation_probs):
     n_components = start_probs.shape[0]
     alpha = np.zeros((len(x), n_components))
@@ -80,7 +107,69 @@ def _score(X, lengths, start_probs, transition_probs, observation_probs):
     return result
 
 @nb.jit(nopython=True, parallel=True)
-def _fit(X, lengths, n_iter, n_components, start_probs, transition_probs, observation_probs):
+def _predict(X, lengths, start_probs, transition_probs, observation_probs):
+    R = len(lengths)
+    y = np.zeros(X.shape, dtype=np.int8)
+
+    for r in nb.prange(R):
+        x = X[lengths[0:r].sum():lengths[0:r+1].sum()]
+
+        delta = _delta(x, start_probs, transition_probs, observation_probs)
+        psi = _psi(x, start_probs, transition_probs, delta)
+
+        path = np.zeros((len(x)), dtype=np.int8)
+        path[-1] = np.argmax(delta[-1])
+
+        for t in range(len(x) - 2, -1, -1):
+            path[t] = psi[t + 1, path[t + 1]]
+
+        y[lengths[0:r].sum():lengths[0:r+1].sum()] = path
+
+    return y
+
+@nb.jit(nopython=True, parallel=True)
+def _init(X, y, lengths):
+    begins = y[np.cumsum(lengths)[0:-1]]
+    begins = np.hstack((y[0:1], begins))
+
+    y_counts = np.zeros((y.max() + 1))
+    yy_counts = np.zeros((y.max() + 2, y.max() + 2))
+    yX_counts = np.zeros((y.max() + 1, X.max() + 1))
+
+    for i in range(len(y)):
+        y_counts[y[i]] += 1
+    
+    for i in range(len(y)):
+        if i in begins:
+            yy_counts[y.max() + 1, y[i]] += 1
+        else:
+            yy_counts[y[i-1], y[i]] += 1
+
+    for i in range(len(y)):
+        yX_counts[y[i], X[i]] += 1
+
+    n_components = y.max() + 1
+    n_vocabulary = X.max() + 1
+    start_probs = np.zeros((n_components))
+    transition_probs = np.zeros((n_components, n_components))
+    observation_probs = np.zeros((n_components, n_vocabulary))
+
+    for i in nb.prange(n_components):
+        start_probs[i] = yy_counts[y.max() + 1, i] / len(lengths)
+
+    for i in nb.prange(n_components):
+        for j in nb.prange(n_components):
+            transition_probs[i, j] = yy_counts[i, j] / y_counts[i]
+
+    for i in nb.prange(n_components):
+        for j in nb.prange(n_vocabulary):
+            observation_probs[i, j] = yX_counts[i, j] / y_counts[i]
+
+    return (start_probs, transition_probs, observation_probs)
+
+@nb.jit(nopython=True, parallel=True)
+def _fit(X, lengths, n_iter, start_probs, transition_probs, observation_probs):
+    n_components = start_probs.shape[0]
     for _ in range(n_iter):
         R = len(lengths)
         xis = np.zeros((R, lengths[0] - 1, n_components, n_components))
@@ -115,19 +204,17 @@ def _fit(X, lengths, n_iter, n_components, start_probs, transition_probs, observ
 class HMMEstimator(skbase.BaseEstimator):
     def __init__(
         self,
+        n_iter=10,
         end_prob=1.0,
         start_probs=None,
         transition_probs=None,
         observation_probs=None,
-        n_components=1,
-        n_iter=10,
     ):
+        self.n_iter = n_iter
         self.end_prob = end_prob
         self.start_probs = start_probs
         self.transition_probs = transition_probs
         self.observation_probs = observation_probs
-        self.n_components = n_components
-        self.n_iter = n_iter
 
     def score(self, X, lengths):
         return _score(
@@ -139,14 +226,24 @@ class HMMEstimator(skbase.BaseEstimator):
         )
 
     def predict(self, X, lengths):
-        pass
+        return _predict(
+            X,
+            lengths,
+            self.start_probs,
+            self.transition_probs,
+            self.observation_probs
+        )
 
-    def fit(self, X, lengths):
+    def fit(self, X, y, lengths):
+        if None in [self.start_probs, self.transition_probs, self.observation_probs]:
+            (self.start_probs, self.transition_probs, self.observation_probs) = _init(
+                X, y, lengths
+            )
+            
         (self.start_probs, self.transition_probs, self.observation_probs) = _fit(
             X,
             lengths,
             self.n_iter,
-            self.n_components,
             self.start_probs,
             self.transition_probs,
             self.observation_probs
@@ -172,11 +269,10 @@ def load_model(path):
     ).astype(float)
 
     return HMMEstimator(
+        n_iter=5,
         start_probs=start_probs,
         transition_probs=transition_probs,
         observation_probs=observation_probs.T,
-        n_components=start_probs.size,
-        n_iter=5,
     )
 
 def save_model(path, model):
