@@ -16,6 +16,7 @@ scipy = "1.6.1"
 hazm = "^0.7.0"
 numpy = "1.21.6"
 numba = "^0.55.1"
+xgboost = "^1.6.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
